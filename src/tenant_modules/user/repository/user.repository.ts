@@ -1,7 +1,9 @@
-import { Injectable } from "@nestjs/common";
+import { BadRequestException, HttpException, HttpStatus, Injectable } from "@nestjs/common";
 import { HelperService } from "src/helper/helper.service";
-import { DeepPartial } from "typeorm";
+import { DeepPartial, FindOptionsWhere } from "typeorm";
 import { User } from "../entities/user.entity";
+import { UserPaginationQueryDto } from "../dto/list-user.dto";
+import { PaginationResponse } from "src/common/types/api-response.type";
 
 
 @Injectable()
@@ -21,15 +23,28 @@ export class UserRepository {
         return await repository.save(newData);
     }
 
-    // async findOneByEmail(param: any): Promise<User | null> {
-    //     console.log({ param });
-    //     try {
-    //         return this.usersRepository.findOne({ where: param });
-    //     } catch (error) {
-    //         throw new BadGatewayException(error.message)
-    //     }
+    async getByField(tenantId: string, where: FindOptionsWhere<User>) {
+        const repository = await this.prepareTenantContext(tenantId);
+        return await repository.findOne({ where });
+    }
 
-    // }
+    async updateById(tenantId: string, id: string | number, data: DeepPartial<User>): Promise<User | null> {
+        try {
+            const repository = await this.prepareTenantContext(tenantId);
+            const entity = await repository.findOne({ where: { id } as any });
+
+            if (!entity) {
+                throw new HttpException('Entity not found', HttpStatus.NOT_FOUND);
+            }
+
+            const updatedEntity = repository.merge(entity, data);
+            const result = await repository.save(updatedEntity);
+
+            return result;
+        } catch (error) {
+            throw new BadRequestException(error.message);
+        }
+    }
 
     // async safeRegExp(userInput: string, flags = "i") {
     //     try {
@@ -41,48 +56,49 @@ export class UserRepository {
     // }
 
 
-    // async getAllPaginateByUser(paginationQueryDto: UserPaginationQueryDto): Promise<PaginationResponse<User>> {
+    async getAllPaginateByUser(tenantId: string, paginationQueryDto: UserPaginationQueryDto): Promise<PaginationResponse<User>> {
 
-    //     const { page, limit, search } = paginationQueryDto;
-    //     const skip = (page - 1) * limit;
+        const repository = await this.prepareTenantContext(tenantId);
+        const { page, limit, search } = paginationQueryDto;
+        const skip = (page - 1) * limit;
 
-    //     const queryBuilder = await this.usersRepository
-    //         .createQueryBuilder('users')
-    //         .where('users.isDeleted = :isDeleted', { isDeleted: false });
+        const queryBuilder = await repository
+            .createQueryBuilder('users')
+            .where('users.isDeleted = :isDeleted', { isDeleted: false });
 
-    //     if (search) {
-    //         queryBuilder.andWhere(
-    //             '(users.firstName LIKE :search OR users.email LIKE :search OR users.lastName LIKE :search)',
-    //             { search: `%${search}%` },
-    //         );
-    //     }
+        if (search) {
+            queryBuilder.andWhere(
+                '(users.firstName LIKE :search OR users.email LIKE :search OR users.lastName LIKE :search)',
+                { search: `%${search}%` },
+            );
+        }
 
-    //     const [data, totalDocs] = await queryBuilder
-    //         .skip(skip)
-    //         .take(limit)
-    //         .orderBy('users.createdAt', 'DESC')
-    //         .getManyAndCount();
+        const [data, totalDocs] = await queryBuilder
+            .skip(skip)
+            .take(limit)
+            .orderBy('users.createdAt', 'DESC')
+            .getManyAndCount();
 
-    //     const hasMoreDocs = totalDocs > 0;
-    //     const remainingDocs = totalDocs - (skip + data.length) > 0;
-    //     const hasNextPage = hasMoreDocs && remainingDocs;
-    //     const hasPrevPage = page != 1;
+        const hasMoreDocs = totalDocs > 0;
+        const remainingDocs = totalDocs - (skip + data.length) > 0;
+        const hasNextPage = hasMoreDocs && remainingDocs;
+        const hasPrevPage = page != 1;
 
 
-    //     return {
-    //         meta: {
-    //             totalDocs: totalDocs,
-    //             skip: skip,
-    //             page: page,
-    //             limit: limit,
-    //             hasPrevPage: hasPrevPage,
-    //             hasNextPage: hasNextPage,
-    //             prevPage: hasPrevPage ? (page - 1) : null,
-    //             nextPage: hasNextPage ? (page + 1) : null,
-    //         },
-    //         docs: data,
-    //     };
-    // }
+        return {
+            meta: {
+                totalDocs: totalDocs,
+                skip: skip,
+                page: page,
+                limit: limit,
+                hasPrevPage: hasPrevPage,
+                hasNextPage: hasNextPage,
+                prevPage: hasPrevPage ? (page - 1) : null,
+                nextPage: hasNextPage ? (page + 1) : null,
+            },
+            docs: data,
+        };
+    }
 
 
 }
