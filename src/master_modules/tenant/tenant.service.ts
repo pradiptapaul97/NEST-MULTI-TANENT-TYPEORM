@@ -15,6 +15,19 @@ export class TenantService {
     private readonly helperService: HelperService,
   ) { }
 
+  async findByHeaderId(headerTenantId: string) {
+    let tenantData = await this.tenantRepository.getByField({
+      key: headerTenantId,
+      isDeleted: false
+    });
+
+    if (!tenantData?.id) {
+      throw new NotFoundException(`Tenant with header ID "${headerTenantId}" not found`);
+    }
+
+    return tenantData;
+  }
+
 
   async create(createTenantDto: CreateTenantDto) {
     // Step 1: Save tenant metadata to main DB

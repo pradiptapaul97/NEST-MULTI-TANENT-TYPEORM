@@ -18,14 +18,22 @@ export class UserRepository {
     }
 
     async save(tenantId: string, data: DeepPartial<User>) {
-        const repository = await this.prepareTenantContext(tenantId);
-        const newData = repository.create(data);
-        return await repository.save(newData);
+        try {
+            const repository = await this.prepareTenantContext(tenantId);
+            const newData = repository.create(data);
+            return await repository.save(newData);
+        } catch (error) {
+            throw new BadRequestException(error.message);
+        }
     }
 
     async getByField(tenantId: string, where: FindOptionsWhere<User>) {
-        const repository = await this.prepareTenantContext(tenantId);
-        return await repository.findOne({ where });
+        try {
+            const repository = await this.prepareTenantContext(tenantId);
+            return await repository.findOne({ where });
+        } catch (error) {
+            throw new BadRequestException(error.message);
+        }
     }
 
     async updateById(tenantId: string, id: string | number, data: DeepPartial<User>): Promise<User | null> {
@@ -58,46 +66,50 @@ export class UserRepository {
 
     async getAllPaginateByUser(tenantId: string, paginationQueryDto: UserPaginationQueryDto): Promise<PaginationResponse<User>> {
 
-        const repository = await this.prepareTenantContext(tenantId);
-        const { page, limit, search } = paginationQueryDto;
-        const skip = (page - 1) * limit;
+        try {
+            const repository = await this.prepareTenantContext(tenantId);
+            const { page, limit, search } = paginationQueryDto;
+            const skip = (page - 1) * limit;
 
-        const queryBuilder = await repository
-            .createQueryBuilder('users')
-            .where('users.isDeleted = :isDeleted', { isDeleted: false });
+            const queryBuilder = await repository
+                .createQueryBuilder('users')
+                .where('users.isDeleted = :isDeleted', { isDeleted: false });
 
-        if (search) {
-            queryBuilder.andWhere(
-                '(users.firstName LIKE :search OR users.email LIKE :search OR users.lastName LIKE :search)',
-                { search: `%${search}%` },
-            );
+            if (search) {
+                queryBuilder.andWhere(
+                    '(users.firstName LIKE :search OR users.email LIKE :search OR users.lastName LIKE :search)',
+                    { search: `%${search}%` },
+                );
+            }
+
+            const [data, totalDocs] = await queryBuilder
+                .skip(skip)
+                .take(limit)
+                .orderBy('users.createdAt', 'DESC')
+                .getManyAndCount();
+
+            const hasMoreDocs = totalDocs > 0;
+            const remainingDocs = totalDocs - (skip + data.length) > 0;
+            const hasNextPage = hasMoreDocs && remainingDocs;
+            const hasPrevPage = page != 1;
+
+
+            return {
+                meta: {
+                    totalDocs: totalDocs,
+                    skip: skip,
+                    page: page,
+                    limit: limit,
+                    hasPrevPage: hasPrevPage,
+                    hasNextPage: hasNextPage,
+                    prevPage: hasPrevPage ? (page - 1) : null,
+                    nextPage: hasNextPage ? (page + 1) : null,
+                },
+                docs: data,
+            };
+        } catch (error) {
+            throw new BadRequestException(error.message);
         }
-
-        const [data, totalDocs] = await queryBuilder
-            .skip(skip)
-            .take(limit)
-            .orderBy('users.createdAt', 'DESC')
-            .getManyAndCount();
-
-        const hasMoreDocs = totalDocs > 0;
-        const remainingDocs = totalDocs - (skip + data.length) > 0;
-        const hasNextPage = hasMoreDocs && remainingDocs;
-        const hasPrevPage = page != 1;
-
-
-        return {
-            meta: {
-                totalDocs: totalDocs,
-                skip: skip,
-                page: page,
-                limit: limit,
-                hasPrevPage: hasPrevPage,
-                hasNextPage: hasNextPage,
-                prevPage: hasPrevPage ? (page - 1) : null,
-                nextPage: hasNextPage ? (page + 1) : null,
-            },
-            docs: data,
-        };
     }
 
 

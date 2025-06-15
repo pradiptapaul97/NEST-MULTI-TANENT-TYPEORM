@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import { HelperService } from "src/helper/helper.service";
 import { CreateRoleDto } from "../dto/create-role.dto";
 import { Role } from "../entities/role.entity";
@@ -18,14 +18,22 @@ export class RoleRepository {
     }
 
     async save(tenantId: string, data: CreateRoleDto) {
-        const repository = await this.prepareTenantContext(tenantId);
-        const newData = repository.create(data);
-        return await repository.save(newData);
+        try {
+            const repository = await this.prepareTenantContext(tenantId);
+            const newData = repository.create(data);
+            return await repository.save(newData);
+        } catch (error) {
+            throw new BadRequestException(error.message);
+        }
     }
 
     async getByField(tenantId: string, where: FindOptionsWhere<Role>) {
-        const repository = await this.prepareTenantContext(tenantId);
-        return await repository.findOne({ where });
+        try {
+            const repository = await this.prepareTenantContext(tenantId);
+            return await repository.findOne({ where });
+        } catch (error) {
+            throw new BadRequestException(error.message);
+        }
     }
 }
 
